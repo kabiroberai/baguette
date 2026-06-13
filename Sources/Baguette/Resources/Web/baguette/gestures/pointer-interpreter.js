@@ -30,7 +30,6 @@
   'use strict';
 
   const BASE_SPREAD_PT = 80;            // sim-pt for pinch/pan modifier
-  const DRAG_THRESHOLD_PX = 8;          // mouse delta to promote pending→drag
   const EDGE_BAND_NORM = 0.93;          // mouse: bottom edge hot zone
   const TOP_BAND_NORM  = 0.07;          // mouse: top edge hot zone
   // Touch on iPhone Safari reports `clientY` as the centroid of the
@@ -180,11 +179,9 @@
           this._previewPan(r, /* shiftPxX */ 0, /* shiftPxY */ 0);
           this.log('pan begin');
         } else {
-          // Deferred: decide tap vs drag on first movement past threshold.
-          state = { mode: 'pending',
-                    startVx: vx, startVy: vy, startW: r.width, startH: r.height,
-                    startClientX: e.clientX, startClientY: e.clientY,
-                    startedAt: Date.now() };
+          state = { mode: 'drag-stream' };
+          this.screen.touchDown([this._pointInScreen(e)]);
+          lastMoveMs = 0;
         }
       });
 
@@ -218,27 +215,6 @@
           return;
         }
 
-        // Promote pending → drag-stream once the cursor moves past
-        // the tap threshold. Stream a SINGLE finger (`touch1-*`): the
-        // digitizer recipe (IOHIDDigitizerDispatch) threads one
-        // continuous touch with a sticky identifier, which is what
-        // drives single-finger recognisers — SwiftUI `DragGesture`,
-        // `ScrollView` pan, table/list scroll. The old two-coincident-
-        // finger hack (`touch2-*`) routed through the legacy mouse path
-        // and landed as a degenerate two-finger gesture that those
-        // single-touch recognisers ignore. Pinch / pan stay 2-finger
-        // and are gated behind the Alt / Shift modifiers above.
-        if (state.mode === 'pending') {
-          if (Math.hypot(vx - state.startVx, vy - state.startVy) < DRAG_THRESHOLD_PX) return;
-          const start = this._pointInScreen({
-            clientX: state.startVx + (e.clientX - vx),
-            clientY: state.startVy + (e.clientY - vy),
-          });
-          state = { mode: 'drag-stream' };
-          this.screen.touchDown([start]);
-          lastMoveMs = 0;
-        }
-
         if (state.mode === 'drag-stream') {
           const now = performance.now();
           if (now - lastMoveMs < MOVE_FLUSH_MS) return;
@@ -262,16 +238,6 @@
         } else if (state.mode === 'drag-stream') {
           this.screen.touchUp([this._pointInScreen(e)]);
           this.log('drag end');
-        } else if (state.mode === 'pending') {
-          // Never promoted past tap threshold → one-shot tap.
-          const r0 = this._el.getBoundingClientRect();
-          const pt = this._pointInScreen({
-            clientX: state.startVx + r0.left,
-            clientY: state.startVy + r0.top,
-          });
-          this.screen.tap(pt);
-          this._ripple(state.startClientX, state.startClientY);
-          this.log('tap');
         }
         state = null;
         this._dragActive = false;
