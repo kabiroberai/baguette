@@ -46,7 +46,7 @@
 
       const screenArea = document.createElement('div');
       screenArea.style.cssText =
-        'position:absolute;overflow:hidden;cursor:crosshair;z-index:2;';
+        'position:absolute;overflow:hidden;cursor:default;z-index:2;';
       screenArea.tabIndex = 0;
       screenArea.style.outline = 'none';
 
